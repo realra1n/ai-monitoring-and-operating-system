@@ -1,6 +1,9 @@
-let token = null;
+let token = localStorage.getItem('os_token');
+let currentUser = null;
 const content = document.getElementById('content');
 const viewTitle = document.getElementById('view-title');
+const userFab = document.getElementById('user-fab');
+const userPopover = document.getElementById('user-popover');
 
 function setView(name){
   viewTitle.textContent = name;
@@ -19,7 +22,7 @@ function setView(name){
 
 function requireAuth(){
   if(!token){
-    content.innerHTML = `<div class="notice">请先登录（右上角）</div>`;
+    window.location.href = '/login.html';
     return false;
   }
   return true;
@@ -29,19 +32,14 @@ document.querySelectorAll('.sidenav nav a').forEach(a=>{
   a.addEventListener('click',()=>setView(a.dataset.view));
 });
 
-async function login(){
-  const email = document.getElementById('email').value;
-  const password = document.getElementById('password').value;
-  const form = new URLSearchParams();
-  form.append('username', email);
-  form.append('password', password);
-  const res = await fetch('/api/auth/login', {method:'POST', body: form});
-  const data = await res.json();
-  token = data.access_token;
-  setView('dashboard');
+async function fetchMe(){
+  if(!token) return;
+  const res = await fetch('/api/auth/me', {headers:{Authorization:`Bearer ${token}`}});
+  if(res.ok){
+    currentUser = await res.json();
+  localStorage.setItem('os_user', JSON.stringify(currentUser));
+  }
 }
-
-document.getElementById('login').addEventListener('click', login);
 
 function grafanaUrl(){
   const u = new URL(window.location.href);
@@ -60,6 +58,43 @@ function renderDashboard(){
     </div>
   </div>`;
 }
+
+// Login page moved to login.html
+
+function renderUserFab(){
+  if(!currentUser){
+    userFab.classList.add('hidden');
+    userPopover.classList.add('hidden');
+    return;
+  }
+  const initials = (currentUser.name || currentUser.email || 'U').slice(0,1).toUpperCase();
+  userFab.textContent = initials;
+  userFab.classList.remove('hidden');
+}
+
+userFab?.addEventListener('click', ()=>{
+  if(!currentUser) return;
+  const html = `
+    <div class='user-card'>
+      <div class='user-row strong'>${currentUser.name}</div>
+      <div class='user-row'>${currentUser.email}</div>
+      <div class='user-row small'>用户ID：${currentUser.id}</div>
+      <div class='user-row small'>所属组织：${currentUser.tenant}</div>
+      <div class='user-actions'>
+        <button id='logout-btn' class='danger'>退出登录</button>
+      </div>
+    </div>`;
+  userPopover.innerHTML = html;
+  userPopover.classList.toggle('hidden');
+  document.getElementById('logout-btn').addEventListener('click', ()=>{
+  token = null; currentUser = null;
+  localStorage.removeItem('os_token');
+  localStorage.removeItem('os_user');
+    userPopover.classList.add('hidden');
+    renderUserFab();
+  window.location.href = '/login.html';
+  });
+});
 
 async function renderTraining(){
   if(!requireAuth()) return;
@@ -121,4 +156,12 @@ function renderSettings(){
   content.innerHTML = `<div class='card'>设置（Demo 占位）</div>`;
 }
 
-setView('dashboard');
+// Initial view: if not logged in, redirect to login page
+if(!token){
+  window.location.href = '/login.html';
+}else{
+  const cached = localStorage.getItem('os_user');
+  currentUser = cached ? JSON.parse(cached) : null;
+  (async ()=>{ if(!currentUser) await fetchMe(); renderUserFab(); })();
+  setView('dashboard');
+}

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录 - OneService</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script defer src="/login.js"></script>
+  <style>
+    .brand {text-align:center;margin-bottom:10px;color:#111827;font-weight:700}
+  </style>
+  </head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand">OneService 智算监控运维系统</div>
+      <p class="muted">请登录继续</p>
+      <label>邮箱</label>
+      <input id="login-email" value="demo@oneservice.local" />
+      <label>密码</label>
+      <input id="login-password" type="password" value="demo123" />
+      <button id="login-btn">登录</button>
+      <div id="login-msg" class="muted small"></div>
+    </div>
+  </div>
+</body>
+</html>
