@@ -1,0 +1,12 @@
+tenant: demo
+labels:
+  service: mnist-test
+  env: dev
+exporters:
+  node_exporter:
+    enabled: true
+    port: 9100
+  mysqld_exporter:
+    enabled: false
+    port: 9104
+    dsn: "root:password@tcp(127.0.0.1:3306)/"

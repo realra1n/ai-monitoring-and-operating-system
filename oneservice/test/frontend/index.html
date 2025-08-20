@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MNIST CNN Demo</title>
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;margin:20px;color:#111}
+    .row{display:flex;gap:20px}
+    .card{border:1px solid #ddd;border-radius:8px;padding:12px}
+    #canvas{border:1px solid #333;background:#fff;touch-action:none}
+    button{padding:8px 12px;border:0;background:#111827;color:#fff;border-radius:6px;cursor:pointer}
+    #status{white-space:pre-line;color:#374151;margin-top:10px}
+    .muted{color:#6b7280}
+    #model-path{font-family:monospace;color:#0b5}
+  </style>
+</head>
+<body>
+  <h2>MNIST CNN Demo</h2>
+  <div class="row">
+    <div class="card">
+      <canvas id="canvas" width="280" height="280"></canvas>
+      <div style="margin-top:8px">
+        <button id="clear">清空</button>
+        <button id="predict">预测</button>
+      </div>
+    </div>
+    <div class="card" style="flex:1">
+      <div style="margin-bottom:8px">
+        <button id="train">训练模型</button>
+      </div>
+      <div class="muted">状态</div>
+      <div id="status"></div>
+      <div class="muted" style="margin-top:8px">ONNX 模型路径</div>
+      <div id="model-path">-</div>
+      <div style="margin-top:8px">
+        <button id="download" disabled>下载 ONNX</button>
+      </div>
+      <div class="muted" style="margin-top:8px">预测结果</div>
+      <div id="pred">-</div>
+    </div>
+  </div>
+
+<script>
+const statusEl = document.getElementById('status');
+const modelPathEl = document.getElementById('model-path');
+const predEl = document.getElementById('pred');
+const downloadBtn = document.getElementById('download');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let drawing=false, last=[0,0];
+ctx.fillStyle = 'white'; ctx.fillRect(0,0,280,280);
+ctx.strokeStyle = 'black'; ctx.lineWidth = 18; ctx.lineCap='round';
+
+function pos(evt){const r=canvas.getBoundingClientRect();return {x:(evt.touches?evt.touches[0].clientX:evt.clientX)-r.left,y:(evt.touches?evt.touches[0].clientY:evt.clientY)-r.top}}
+canvas.addEventListener('mousedown',e=>{drawing=true; last=pos(e)});
+canvas.addEventListener('mousemove',e=>{if(!drawing)return;const p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p;});
+canvas.addEventListener('mouseup',()=>drawing=false);
+canvas.addEventListener('mouseleave',()=>drawing=false);
+canvas.addEventListener('touchstart',e=>{drawing=true; last=pos(e)});
+canvas.addEventListener('touchmove',e=>{if(!drawing)return;const p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; e.preventDefault();},{passive:false});
+canvas.addEventListener('touchend',()=>drawing=false);
+
+async function poll(){
+  try{
+    const r = await fetch('/status');
+    const s = await r.json();
+    statusEl.textContent = JSON.stringify(s,null,2);
+    if(s.model_path) {
+      modelPathEl.textContent = s.model_path;
+      downloadBtn.disabled = false;
+    } else {
+      downloadBtn.disabled = true;
+    }
+  }catch{}
+}
+setInterval(poll, 1500);
+
+async function startTrain(){
+  await fetch('/train', {method:'POST'});
+  statusEl.textContent = 'training...';
+}
+
+document.getElementById('train').onclick=startTrain;
+document.getElementById('clear').onclick=()=>{ctx.clearRect(0,0,280,280);ctx.fillStyle='white';ctx.fillRect(0,0,280,280);ctx.strokeStyle='black'};
+
+downloadBtn.onclick=()=>{
+  window.location.href = '/onnx';
+};
+
+document.getElementById('predict').onclick=async()=>{
+  // downscale 280x280 to 28x28 grayscale [0,1]
+  const tmp = document.createElement('canvas'); tmp.width=28; tmp.height=28;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(canvas, 0,0,280,280, 0,0,28,28);
+  const img = tctx.getImageData(0,0,28,28);
+  const pixels = [];
+  for(let i=0;i<img.data.length;i+=4){ // rgba
+    const r=img.data[i], g=img.data[i+1], b=img.data[i+2];
+    // Grayscale then invert to match MNIST (white digit on black)
+    const gray = (0.299*r + 0.587*g + 0.114*b)/255;
+  const inv = 1 - gray;
+  // simple denoise: threshold to emphasize strokes
+  const val = inv > 0.2 ? inv : 0;
+  pixels.push(val);
+  }
+  const res = await fetch('/predict', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(pixels)});
+  if(!res.ok){ predEl.textContent = '预测失败，请先训练模型'; return; }
+  const data = await res.json();
+  predEl.textContent = '预测类别：' + data.pred;
+};
+</script>
+</body>
+</html>

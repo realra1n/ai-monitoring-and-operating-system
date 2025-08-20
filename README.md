@@ -12,6 +12,8 @@ Quickstart (macOS/Linux):
 	- Frontend http://localhost:8080
 	- Backend API docs http://localhost:8000/api/docs
 	- Grafana http://localhost:3000 (admin/admin)
+	- Prometheus http://localhost:9090 (no auth)
+	- Thanos Query http://localhost:10902 (no auth)
 	- Jaeger http://localhost:16686
 
 Login demo:
