@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OneService</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidenav">
+      <div class="logo">OneService</div>
+      <nav>
+        <a data-view="dashboard" class="active">Dashboard</a>
+        <a data-view="nodes">K8S & 节点</a>
+        <a data-view="events">K8S 事件</a>
+        <a data-view="training">训练监控</a>
+        <a data-view="model">模型可视化</a>
+        <a data-view="alerts">告警与阈值</a>
+        <a data-view="tenants">租户与用户</a>
+        <a data-view="settings">设置</a>
+      </nav>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div class="menu"> <span id="view-title">Dashboard</span> </div>
+        <div class="auth">
+          <input id="email" value="demo@oneservice.local" />
+          <input id="password" value="demo123" type="password" />
+          <button id="login">登录</button>
+        </div>
+      </header>
+      <section id="content"></section>
+    </main>
+  </div>
+</body>
+</html>
