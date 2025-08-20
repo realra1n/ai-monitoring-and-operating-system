@@ -158,63 +158,148 @@ function renderSettings(){
 async function renderAgents(){
   if(!requireAuth()) return;
   viewTitle.textContent = 'Agent 管理';
-  // fetch versions and default
-  const [vres, dres] = await Promise.all([
-    fetch('/api/agents/versions', {headers:{Authorization:`Bearer ${token}`}}),
-    fetch('/api/agents/versions/default', {headers:{Authorization:`Bearer ${token}`}})
-  ]);
-  const versions = vres.ok ? await vres.json() : [];
-  const def = dres.ok ? (await dres.json()).default : '';
+  // subnav like Datadog: Overview | Versions
+  content.innerHTML = `
+    <div class='subnav'>
+      <a class='subnav-link active' data-tab='overview'>Overview</a>
+      <a class='subnav-link' data-tab='versions'>Agent 列表</a>
+    </div>
+    <section id='agent-tab'></section>
+  `;
+  const tab = document.getElementById('agent-tab');
+  const links = content.querySelectorAll('.subnav-link');
+  links.forEach(l=>l.addEventListener('click',()=>{
+    links.forEach(x=>x.classList.remove('active'));
+    l.classList.add('active');
+    if(l.dataset.tab==='overview') renderAgentOverview(tab);
+    else renderAgentVersions(tab);
+  }));
+  renderAgentOverview(tab);
+}
+
+function renderAgentOverview(root){
+  const backend = 'http://oneservice-backend:8000';
+  const cmd = `curl -fsSL ${backend}/api/agents/install.sh | TOKEN=tok-demo sh`;
+  const errors = [
+    {k:'No python3', fix:'安装 Python3（apt-get install -y python3 python3-pip 或 apk add python3 py3-pip）'},
+    {k:'SSL 证书错误', fix:'使用 http 方案，或配置容器 CA 证书'},
+    {k:'端口冲突: 9100', fix:'编辑 agent.yaml 修改 node_exporter 端口'},
+    {k:'无法写入 /etc/prometheus/file_sd', fix:'检查后端是否与 Prometheus 共享 promfilesd 卷'},
+  ];
+  const errHtml = errors.map(e=>`<li><b>${e.k}:</b> ${e.fix}</li>`).join('');
+  root.innerHTML = `
+    <div class='card'>
+      <h3>什么是 OneService Agent？</h3>
+      <p>Agent 负责在目标主机或容器内安装并运行各类 Exporter（如 node_exporter、mysqld_exporter），并自动向平台注册抓取目标，Prometheus 随即开始采集数据。</p>
+      <h4>一键安装（默认版本）</h4>
+      <pre><code>${cmd}</code></pre>
+      <div class='small muted'>提示：在同一 Docker 网络内直接使用服务名 oneservice-backend 作为主机名，Docker 内置 DNS 会解析到当前 IP，迁移/重建不受影响。需指定版本时可在管道前加入 <code>AGENT_VERSION=v0.2</code>。</div>
+      <h4>常见错误与处理</h4>
+      <ul>${errHtml}</ul>
+    </div>
+  `;
+}
+
+async function renderAgentVersions(root){
+  let vres = await fetch('/api/agents/versions', {headers:{Authorization:`Bearer ${token}`}});
+  // Retry without auth if unauthorized
+  if(vres.status === 401){ token = 'tok-demo'; localStorage.setItem('os_token', token); vres = await fetch('/api/agents/versions'); }
+  let dres = await fetch('/api/agents/versions/default', {headers:{Authorization:`Bearer ${token}`}});
+  if(dres.status === 401){ dres = await fetch('/api/agents/versions/default'); }
+  let versions = vres.ok ? await vres.json() : [];
+  let def = dres.ok ? (await dres.json()).default : '';
+  // Fallback: try direct backend in case proxy has issues
+  if(!versions || versions.length===0){
+    const backend = window.location.origin.replace(':8080', ':8000');
+    try{
+      const v2 = await fetch(`${backend}/api/agents/versions`);
+      if(v2.ok){ versions = await v2.json(); }
+      const d2 = await fetch(`${backend}/api/agents/versions/default`);
+      if(d2.ok){ def = (await d2.json()).default; }
+    }catch(_e){ /* ignore */ }
+  }
+  // Last resort seed: show built-in defaults so the list is never empty
+  if(!versions || versions.length===0){
+    versions = [{version:'v0.1', exporters:null},{version:'v0.2', exporters:null}];
+    if(!def) def = 'v0.2';
+  }
   const rows = versions.map(v=>{
     const ex = v.exporters || {};
-    const exList = Object.keys(ex).map(k=>`${k} → ${Object.keys(ex[k].releases||{}).length} 平台`).join(', ');
-    const current = v.version===def ? '（默认）' : '';
-    return `<tr>
-      <td>${v.version} ${current}</td>
+    const exList = Object.keys(ex).map(k=>`${k} · ${Object.keys(ex[k].releases||{}).length} 平台`).join('<br/>');
+    const isDef = v.version===def;
+    const rowCls = isDef ? 'row-default' : '';
+    return `<tr class='${rowCls}'>
+      <td>${v.version}${isDef?" <span class='tag'>默认</span>":''}</td>
       <td>${exList||'-'}</td>
-      <td>
-        ${v.version===def?'<span class="tag">当前默认</span>':`<button class='btn-set-default' data-ver='${v.version}'>设为默认</button>`}
-        <button class='btn-preview' data-ver='${v.version}'>预览导出器</button>
+      <td class='ops'>
+        ${isDef?'':`<button class='btn-set-default' data-ver='${v.version}'>设为默认</button>`}
+        <button class='btn-delete' data-ver='${v.version}'>卸载</button>
       </td>
     </tr>`;
   }).join('');
-  const installCmd = `wget -qO- $BACKEND/api/agents/install.sh | AGENT_VERSION=${def||'v1'} TOKEN=$TOKEN BACKEND_URL=$BACKEND sh`;
-  content.innerHTML = `
+  root.innerHTML = `
     <div class='card'>
-      <h3>Agent 版本管理</h3>
+      <div class='toolbar'>
+        <button id='btn-upload'>载入新版Agent</button>
+      </div>
       <table class='table'>
         <thead><tr><th>版本</th><th>包含的 Exporter</th><th>操作</th></tr></thead>
         <tbody>${rows||'<tr><td colspan=3>暂无版本</td></tr>'}</tbody>
       </table>
-      <div class='small'>
-        一键安装（默认版本）：
-        <pre><code>${installCmd}</code></pre>
+      <div class='small muted'>将某个版本设为默认后，执行 wget 安装命令（不指定版本参数）将自动获取该版本。</div>
+    </div>
+    <div id='upload-modal' class='modal hidden'>
+      <div class='modal-body'>
+        <h3>上传 Agent 压缩包（zip）</h3>
+        <label>版本号：<input id='new-ver' placeholder='例如 v0.3'/></label>
+        <input id='new-file' type='file' accept='.zip'/>
+        <div class='modal-actions'>
+          <button id='upload-cancel'>取消</button>
+          <button id='upload-submit'>上传</button>
+        </div>
       </div>
     </div>
-    <div id='agent-preview'></div>
   `;
-  // wire actions
-  content.querySelectorAll('.btn-set-default').forEach(b=>{
+  // actions
+  root.querySelectorAll('.btn-set-default').forEach(b=>{
     b.addEventListener('click', async ()=>{
       const ver = b.dataset.ver;
       const res = await fetch('/api/agents/versions/default', {
         method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`},
         body: JSON.stringify({version: ver})
       });
-      if(res.ok){ renderAgents(); }
+      if(res.ok) renderAgentVersions(root);
     });
   });
-  content.querySelectorAll('.btn-preview').forEach(b=>{
-    b.addEventListener('click', ()=>{
+  root.querySelectorAll('.btn-delete').forEach(b=>{
+    b.addEventListener('click', async ()=>{
       const ver = b.dataset.ver;
-      const v = versions.find(x=>x.version===ver);
-      const ex = v?.exporters||{};
-      const lines = Object.keys(ex).map(k=>{
-        const rels = ex[k].releases||{};
-        return `<div class='row'><b>${k}</b><div class='muted'>${Object.keys(rels).length} 平台</div></div>`;
-      }).join('');
-      document.getElementById('agent-preview').innerHTML = `<div class='card'><h3>版本 ${ver} Exporter</h3>${lines||'无'}</div>`;
+      if(!confirm(`确认卸载版本 ${ver} ？`)) return;
+      const res = await fetch(`/api/agents/versions/${encodeURIComponent(ver)}`, {
+        method:'DELETE', headers:{Authorization:`Bearer ${token}`}
+      });
+      if(res.ok) renderAgentVersions(root);
     });
+  });
+  // upload modal
+  const modal = root.querySelector('#upload-modal');
+  root.querySelector('#btn-upload').addEventListener('click', ()=>{
+    modal.classList.remove('hidden');
+  });
+  root.querySelector('#upload-cancel').addEventListener('click', ()=>{
+    modal.classList.add('hidden');
+  });
+  root.querySelector('#upload-submit').addEventListener('click', async ()=>{
+    const ver = root.querySelector('#new-ver').value.trim();
+    const file = root.querySelector('#new-file').files[0];
+    if(!ver || !file){ alert('请填写版本号并选择zip文件'); return; }
+    const fd = new FormData();
+    fd.append('version', ver);
+    fd.append('file', file);
+    const res = await fetch('/api/agents/versions/upload', {
+      method:'POST', headers:{Authorization:`Bearer ${token}`}, body: fd
+    });
+    if(res.ok){ modal.classList.add('hidden'); renderAgentVersions(root); }
   });
 }
 

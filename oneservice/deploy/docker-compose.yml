@@ -97,6 +97,7 @@ services:
       MINIO_ACCESS_KEY: minio
       MINIO_SECRET_KEY: minio123
       MINIO_BUCKET: artifacts
+      NODE_EXPORTER_PORT: "9100"
     depends_on: [postgres, minio, opensearch, grafana, prometheus, thanos-query, jaeger, otel-collector]
     ports: ["8000:8000"]
     volumes:
@@ -106,6 +107,8 @@ services:
     build: ../frontend
     depends_on: [oneservice-backend, grafana]
     ports: ["8080:80"]
+    environment:
+      NODE_EXPORTER_PORT: "9100"
 
   mnist-test:
     platform: linux/arm64

@@ -4,9 +4,6 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['prometheus:9090']
-  - job_name: 'backend'
-    static_configs:
-      - targets: ['oneservice-backend:8000']
   - job_name: 'oneservice-agents'
     file_sd_configs:
       - files:

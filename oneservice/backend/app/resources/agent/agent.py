@@ -121,6 +121,7 @@ def register_with_backend(backend: str, token: str, tenant: str, labels: dict, e
     })
     if not ok:
         print("register failed:", out, file=sys.stderr)
+    return ok
 
 
 def get_host_ip() -> str:
@@ -157,6 +158,7 @@ def main():
         # register targets so Prometheus starts scraping via backend
         register_with_backend(args.backend, args.token, tenant, labels, exporters_cfg)
         # keep running and supervise
+        last_reg = time.time()
         while True:
             time.sleep(5)
             # simple liveness check; restart if crashed
@@ -167,6 +169,10 @@ def main():
                     ecfg = exporters_cfg.get(name, {})
                     np = run_exporter(name, ecfg)
                     if np: procs[i] = np
+            # periodic re-registration (every 60s)
+            if time.time() - last_reg > 60:
+                if register_with_backend(args.backend, args.token, tenant, labels, exporters_cfg):
+                    last_reg = time.time()
     finally:
         for p in procs:
             with contextlib.suppress(Exception):
