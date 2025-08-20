@@ -59,6 +59,7 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - promdata:/prometheus
+      - promfilesd:/etc/prometheus/file_sd
     ports: ["9090:9090"]
 
   thanos-sidecar:
@@ -99,6 +100,8 @@ services:
       MINIO_BUCKET: artifacts
     depends_on: [postgres, minio, opensearch, grafana, prometheus, thanos-query, jaeger, otel-collector]
     ports: ["8000:8000"]
+    volumes:
+      - promfilesd:/etc/prometheus/file_sd
 
   oneservice-frontend:
     build: ../frontend
@@ -109,3 +112,4 @@ volumes:
   pgdata:
   minio:
   promdata:
+  promfilesd:
