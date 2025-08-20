@@ -2,11 +2,18 @@
 set -e
 BACKEND_URL="${BACKEND_URL:-http://oneservice-backend:8000}"
 TOKEN="${TOKEN:-tok-demo}"
+AGENT_VERSION="${AGENT_VERSION:-}"
 WORKDIR="/tmp/oneservice-agent"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
-# Fetch agent.py and default config
-curl -fsSL "$BACKEND_URL/api/agents/assets/agent.py" -o agent.py
+# Fetch agent.py (default or versioned) and default config
+if [ -n "$AGENT_VERSION" ]; then
+  curl -fsSL "$BACKEND_URL/api/agents/assets/$AGENT_VERSION/agent.py" -o agent.py || {
+    echo "Specified AGENT_VERSION=$AGENT_VERSION not found; falling back to default" >&2; AGENT_VERSION=""; }
+fi
+if [ -z "$AGENT_VERSION" ]; then
+  curl -fsSL "$BACKEND_URL/api/agents/assets/agent.py" -o agent.py
+fi
 curl -fsSL "$BACKEND_URL/api/agents/assets/agent.yaml" -o agent.yaml
 chmod +x agent.py
 # Install python and deps if needed (Debian/Ubuntu/musl minimal best-effort)
