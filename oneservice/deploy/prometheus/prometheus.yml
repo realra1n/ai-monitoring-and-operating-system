@@ -1,5 +1,7 @@
 global:
   scrape_interval: 15s
+# Prometheus v2.51+ supports native OTLP/HTTP receiver when started with --web.enable-otlp-receiver
+# Alloy will send metrics via OTLP HTTP to /api/v1/otlp
 scrape_configs:
   - job_name: 'prometheus'
     static_configs:

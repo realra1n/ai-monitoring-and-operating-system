@@ -1,0 +1,41 @@
+server:
+  http_listen_port: 3200
+  log_level: info
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+    jaeger:
+      protocols:
+        thrift_http:
+          endpoint: 0.0.0.0:14268
+
+storage:
+  trace:
+    backend: s3
+    s3:
+      bucket: tempo
+      endpoint: minio:9000
+      access_key: minio
+      secret_key: minio123
+      insecure: true
+    wal:
+      path: /var/tempo/wal
+    pool:
+      max_workers: 10
+      queue_depth: 10000
+
+querier:
+  frontend_worker:
+    frontend_address: 0.0.0.0:9095
+
+query_frontend:
+  max_outstanding_per_tenant: 2000
+  search:
+    concurrent_jobs: 200
+    target_bytes_per_job: 50000000

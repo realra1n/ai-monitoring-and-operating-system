@@ -3,7 +3,7 @@
 This repo contains a runnable MVP for an AI observability platform (Datadog-like) with:
 - Frontend: native HTML/CSS/JS (iframe embeds for Grafana/Netron)
 - Backend: FastAPI with demo auth, runs, SDK ingestion
-- Stack via Docker Compose: Postgres, MinIO, OpenSearch, Prometheus + Thanos, Grafana, Jaeger, OTel Collector
+- Stack via Docker Compose: Postgres, MinIO, OpenSearch, Prometheus + Thanos, Grafana, Jaeger, OTel Collector, Grafana Alloy, Grafana Loki, Grafana Tempo
 - Python SDK: monitor_sdk with example training script
 
 Quickstart (macOS/Linux):
@@ -15,6 +15,11 @@ Quickstart (macOS/Linux):
 	- Prometheus http://localhost:9090 (no auth)
 	- Thanos Query http://localhost:10902 (no auth)
 	- Jaeger http://localhost:16686
+	- Grafana Tempo (API) http://localhost:3200 (use Grafana Explore for traces)
+	- Grafana Loki (API) http://localhost:3100 (use Grafana Explore for logs)
+	- Grafana Alloy OTLP endpoints: gRPC :4317, HTTP :4318 (no UI)
+
+APM menu (in Frontend): APM → Overview/Metrics/Traces/Logs embeds Grafana views wired to Prometheus/Tempo/Loki. Send OTLP to Alloy at http://localhost:4318 and data will flow through.
 
 Login demo:
 - email: demo@oneservice.local

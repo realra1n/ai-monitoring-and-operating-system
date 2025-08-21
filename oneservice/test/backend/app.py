@@ -36,6 +36,72 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory=str(ASSETS_DIR)), name="static")
 
+# --- OpenTelemetry setup ---
+OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://alloy:4318")
+SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "mnist-test")
+
+try:
+    # Minimal OTel setup for FastAPI: traces, metrics, logs -> OTLP
+    from opentelemetry import trace, metrics
+    from opentelemetry.trace import Status, StatusCode
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+    from opentelemetry.sdk._logs import LoggerProvider
+    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+    from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+    from opentelemetry._logs import set_logger_provider, get_logger_provider
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.logging import LoggingInstrumentor
+
+    resource = Resource.create({
+        "service.name": SERVICE_NAME,
+        "service.namespace": "oneservice",
+        "service.version": "0.1.0",
+    })
+
+    # Traces
+    tracer_provider = TracerProvider(resource=resource)
+    tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{OTEL_ENDPOINT}/v1/traces")))
+    trace.set_tracer_provider(tracer_provider)
+    tracer = trace.get_tracer(__name__)
+
+    # Metrics
+    reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=f"{OTEL_ENDPOINT}/v1/metrics"))
+    meter_provider = MeterProvider(resource=resource, metric_readers=[reader])
+    metrics.set_meter_provider(meter_provider)
+    meter = metrics.get_meter(__name__)
+    loss_gauge = meter.create_observable_gauge("mnist_loss", description="Training loss")
+    acc_gauge = meter.create_observable_gauge("mnist_accuracy", description="Training accuracy")
+
+    def _observe_metrics(_):
+        with _lock:
+            points = []
+            if _status["loss"] is not None:
+                points.append((float(_status["loss"]), {}))
+            if _status["acc"] is not None:
+                points.append((float(_status["acc"]), {}))
+            return points
+
+    loss_gauge.callback = lambda: [(_status["loss"] or 0.0, {})]
+    acc_gauge.callback = lambda: [(_status["acc"] or 0.0, {})]
+
+    # Logs
+    logger_provider = LoggerProvider(resource=resource)
+    logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=f"{OTEL_ENDPOINT}/v1/logs")))
+    set_logger_provider(logger_provider)
+    LoggingInstrumentor().instrument(set_logging_format=True)
+
+    # Auto-instrument FastAPI
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer_provider, meter_provider=meter_provider)
+except Exception as _e:  # noqa: F841
+    # OTel optional: proceed even if instrumentation packages are missing
+    pass
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -62,7 +128,11 @@ async def train():
         import tf2onnx
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
         try:
-            (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+            from opentelemetry import trace
+            tr = trace.get_tracer(__name__)
+            with tr.start_as_current_span("load-mnist-dataset"):
+                (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+            # dataset already loaded above
             x_train = (x_train.astype("float32") / 255.0)[..., None]
             x_test = (x_test.astype("float32") / 255.0)[..., None]
 
@@ -87,7 +157,8 @@ async def train():
                             "message": f"epoch {epoch+1} done"
                         })
 
-            model.fit(x_train, y_train, epochs=5, batch_size=128, validation_data=(x_test, y_test), callbacks=[Progress()], verbose=0)
+            with tr.start_as_current_span("train-model"):
+                model.fit(x_train, y_train, epochs=5, batch_size=128, validation_data=(x_test, y_test), callbacks=[Progress()], verbose=0)
 
             # Save TF model
             if TF_MODEL_DIR.exists():
@@ -97,7 +168,8 @@ async def train():
             model.save(str(TF_MODEL_DIR))
 
             # Export ONNX
-            onnx_model, _ = tf2onnx.convert.from_keras(model)
+            with tr.start_as_current_span("export-onnx"):
+                onnx_model, _ = tf2onnx.convert.from_keras(model)
             with open(ONNX_PATH, 'wb') as f:
                 f.write(onnx_model.SerializeToString())
 

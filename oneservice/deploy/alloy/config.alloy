@@ -1,0 +1,71 @@
+// Grafana Alloy config: receive OTLP, process, and forward to Prometheus/Tempo/Loki
+// Wiring uses output blocks per component (no otelcol.service block).
+
+// Receivers for OTLP
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  // Fan out to the first processor in each signal pipeline
+  output {
+    traces  = [otelcol.processor.attributes.attrs.input]
+    metrics = [otelcol.processor.attributes.attrs.input]
+    logs    = [otelcol.processor.attributes.attrs.input]
+  }
+}
+
+// Processors: add a resource attribute, then batch for all signals
+otelcol.processor.attributes "attrs" {
+  action {
+    action = "insert"
+    key    = "service.namespace"
+    value  = "oneservice"
+  }
+
+  output {
+    traces  = [otelcol.processor.batch.default.input]
+    metrics = [otelcol.processor.batch.default.input]
+    logs    = [otelcol.processor.batch.default.input]
+  }
+}
+
+otelcol.processor.batch "default" {
+  output {
+    traces  = [otelcol.exporter.otlp.to_tempo.input]
+    metrics = [otelcol.exporter.otlphttp.to_prom.input]
+    logs    = [otelcol.exporter.loki.to_loki.input]
+  }
+}
+
+// Exporters
+otelcol.exporter.otlphttp "to_prom" {
+  // Prometheus OTLP write receiver (metrics only)
+  client {
+    endpoint = "http://prometheus:9090"
+  }
+  // Prometheus experimental OTLP write endpoint for metrics
+  metrics_endpoint = "http://prometheus:9090/api/v1/otlp/v1/metrics"
+}
+
+otelcol.exporter.otlp "to_tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls { insecure = true }
+  }
+}
+
+otelcol.exporter.loki "to_loki" {
+  forward_to = [loki.write.default.receiver]
+}
+
+// Loki remote write sink
+loki.write "default" {
+  endpoint {
+  url = "http://loki:3100/loki/api/v1/push"
+  tenant_id = "1"
+  }
+}

@@ -1,15 +1,48 @@
 apiVersion: 1
 datasources:
   - name: Prometheus
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
     isDefault: true
   - name: Thanos
+    uid: thanos
     type: prometheus
     access: proxy
     url: http://thanos-query:10902
-  - name: Jaeger
-    type: jaeger
+  - name: Tempo
+    uid: tempo
+    type: tempo
     access: proxy
-    url: http://jaeger:16686
+    url: http://tempo:3200
+    jsonData:
+      tracesToLogs:
+        datasourceUid: loki
+        mappedTags: [{ key: "service.name", value: "service" }]
+        mapTagNamesEnabled: true
+        spanStartTimeShift: "-10m"
+        spanEndTimeShift: "10m"
+        filterByTraceID: true
+        filterBySpanID: false
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      tracesToMetrics:
+        datasourceUid: prometheus
+        # Prometheus series from Spring demo include label 'application' (set via management.metrics.tags.application)
+        # Map OTEL resource tag service.name -> Prometheus label 'application' for traces↔metrics linking
+        tags:
+          - key: "service.name"
+            value: "application"
+        queries:
+          - name: "Latency P90"
+            query: histogram_quantile(0.90, sum by (le) (rate(http_server_requests_milliseconds_bucket{$__tags}[5m])))
+          - name: "Error rate"
+            query: sum(rate(http_server_requests_milliseconds_count{$__tags, outcome="SERVER_ERROR"}[5m])) / sum(rate(http_server_requests_milliseconds_count{$__tags}[5m]))
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100

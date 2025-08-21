@@ -1,0 +1,29 @@
+server:
+  port: 8088
+spring:
+  application:
+    name: spring-otel-demo
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://alloy:4318}/v1/traces
+    metrics:
+      export:
+        enabled: true
+        url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://alloy:4318}/v1/metrics
+
+logging:
+  level:
+    root: INFO
+  pattern:
+    console: '%msg%n'

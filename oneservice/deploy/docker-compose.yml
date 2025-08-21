@@ -22,12 +22,15 @@ services:
 
   minio-setup:
     image: minio/mc:latest
-    depends_on: [minio]
+    depends_on:
+      minio:
+        condition: service_started
     entrypoint: ["/bin/sh", "-c"]
     command: >
-      mc alias set local http://minio:9000 minio minio123 &&
+      i=0; until mc alias set local http://minio:9000 minio minio123; do i=$$((i+1)); echo "waiting for minio... $$i"; sleep 2; done &&
       mc mb -p local/thanos || true &&
-      mc mb -p local/artifacts || true
+      mc mb -p local/artifacts || true &&
+      mc mb -p local/tempo || true
 
   opensearch:
     image: opensearchproject/opensearch:2.11.1
@@ -52,9 +55,14 @@ services:
     ports: ["3000:3000"]
     volumes:
       - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+    depends_on: [prometheus, tempo, loki]
 
   prometheus:
     image: prom/prometheus:v2.51.2
+    command: [
+      "--config.file=/etc/prometheus/prometheus.yml",
+      "--enable-feature=otlp-write-receiver"
+    ]
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - promdata:/prometheus
@@ -116,9 +124,64 @@ services:
       context: ../test
       dockerfile: backend/Dockerfile
     ports: ["8001:8001"]
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318
+      - OTEL_SERVICE_NAME=mnist-test
+
+  # Spring Boot OTEL demo that self-generates traffic
+  spring-otel-demo:
+    build:
+      context: ../test2/spring-otel-demo
+      dockerfile: Dockerfile
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_SERVICE_NAME=spring-otel-demo
+      - SERVER_PORT=8088
+    ports:
+      - "8088:8088"
+    depends_on: [alloy]
+
+  # Grafana Alloy for OTLP reception and processing
+  alloy:
+    image: grafana/alloy:v1.5.0
+    command: ["run", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+    depends_on: [prometheus, tempo, loki]
+
+  # Grafana Tempo for traces (stores data in MinIO via S3 API)
+  tempo:
+    image: grafana/tempo:2.5.0
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempodata:/var/tempo
+    ports:
+      - "3200:3200"  # Tempo HTTP API / Grafana datasource
+      - "14268:14268" # Jaeger ingest (optional)
+    depends_on:
+      minio-setup:
+        condition: service_completed_successfully
+
+  # Grafana Loki for logs
+  loki:
+    image: grafana/loki:3.1.1
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+      - lokidata:/loki
+    ports:
+      - "3100:3100"
+
 
 volumes:
   pgdata:
   minio:
   promdata:
   promfilesd:
+  lokidata:
+  tempodata:
