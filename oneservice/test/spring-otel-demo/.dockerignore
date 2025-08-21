@@ -1,0 +1,22 @@
+# General
+.git
+.gitignore
+README.md
+*.md
+
+# Java/Maven
+target/
+*.log
+*.jar
+!target/*.jar
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
