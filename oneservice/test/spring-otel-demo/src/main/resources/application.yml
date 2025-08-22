@@ -1,0 +1,62 @@
+server:
+  port: 8088
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: spring-otel-demo
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,env
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      service: spring-otel-demo
+      environment: test
+    export:
+      prometheus:
+        enabled: true
+        descriptions: true
+    web:
+      server:
+        request:
+          autotime:
+            enabled: true
+    jvm:
+      enabled: true
+    system:
+      enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://alloy:4318}/v1/traces
+    metrics:
+      export:
+        enabled: true
+        url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://alloy:4318}/v1/metrics
+        step: 10s
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: DEBUG
+    org.springframework.web: DEBUG
+  pattern:
+    console: '%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%t] [traceId=%X{traceId:-} spanId=%X{spanId:-}] %-40.40logger{39} : %msg%n'
+    file: '%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%t] [traceId=%X{traceId:-} spanId=%X{spanId:-}] %-40.40logger{39} : %msg%n'

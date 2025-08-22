@@ -1,0 +1,117 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "OTLP Traces Monitoring",
+    "tags": ["otlp", "traces", "distributed-tracing"],
+    "style": "dark",
+    "timezone": "",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Service Map",
+        "type": "nodeGraph",
+        "targets": [
+          {
+            "queryType": "nodeGraph",
+            "refId": "A",
+            "datasource": {
+              "type": "tempo",
+              "uid": "tempo"
+            }
+          }
+        ],
+        "gridPos": {"h": 12, "w": 24, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Trace Volume by Service",
+        "type": "timeseries",
+        "targets": [
+          {
+            "queryType": "traceql",
+            "refId": "A",
+            "query": "{ } | rate() by (resource.service.name)",
+            "datasource": {
+              "type": "tempo",
+              "uid": "tempo"
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+      },
+      {
+        "id": 3,
+        "title": "Error Traces",
+        "type": "timeseries",
+        "targets": [
+          {
+            "queryType": "traceql",
+            "refId": "A",
+            "query": "{ status = error } | rate() by (resource.service.name)",
+            "datasource": {
+              "type": "tempo",
+              "uid": "tempo"
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+      },
+      {
+        "id": 4,
+        "title": "Latency Distribution",
+        "type": "histogram",
+        "targets": [
+          {
+            "queryType": "traceql",
+            "refId": "A",
+            "query": "{ } | histogram_over_time(duration) by (resource.service.name)",
+            "datasource": {
+              "type": "tempo",
+              "uid": "tempo"
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20}
+      },
+      {
+        "id": 5,
+        "title": "Top Slow Traces",
+        "type": "table",
+        "targets": [
+          {
+            "queryType": "traceql",
+            "refId": "A",
+            "query": "{ duration > 1s } | by (resource.service.name, name)",
+            "datasource": {
+              "type": "tempo",
+              "uid": "tempo"
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 20}
+      },
+      {
+        "id": 6,
+        "title": "Traces Search",
+        "type": "traces",
+        "targets": [
+          {
+            "queryType": "traceql",
+            "refId": "A",
+            "query": "{ }",
+            "datasource": {
+              "type": "tempo",
+              "uid": "tempo"
+            }
+          }
+        ],
+        "gridPos": {"h": 12, "w": 24, "x": 0, "y": 28}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

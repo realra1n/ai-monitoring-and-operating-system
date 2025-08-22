@@ -1,0 +1,37 @@
+<configuration>
+  <property name="LOKI_URL" value="${LOKI_URL:-http://loki:3100}"/>
+  <property name="SERVICE" value="${spring.application.name:-spring-otel-demo}"/>
+
+  <!-- Console JSON for local debugging -->
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder" />
+  </appender>
+
+  <!-- Loki appender -->
+  <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+    <http>
+      <url>${LOKI_URL}/loki/api/v1/push</url>
+      <batchMaxBytes>262144</batchMaxBytes>
+      <connectionTimeoutMs>3000</connectionTimeoutMs>
+      <requestTimeoutMs>5000</requestTimeoutMs>
+    </http>
+    <format>
+      <label>
+        <pattern>service=${SERVICE},level=%level,logger=%logger{36}</pattern>
+      </label>
+      <message>
+        <pattern>%msg</pattern>
+      </message>
+      <timestamp>
+        <pattern>%d{UNIX_MILLIS}</pattern>
+      </timestamp>
+    </format>
+    <includeMdc>true</includeMdc>
+    <mdcFields>traceId,spanId</mdcFields>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="STDOUT" />
+    <appender-ref ref="LOKI" />
+  </root>
+</configuration>

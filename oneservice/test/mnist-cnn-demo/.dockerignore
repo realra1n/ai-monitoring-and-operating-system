@@ -1,0 +1,46 @@
+# General
+.git
+.gitignore
+README.md
+*.md
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.DS_Store
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models (will be created at runtime)
+models/
+*.h5
+*.pb
+*.onnx

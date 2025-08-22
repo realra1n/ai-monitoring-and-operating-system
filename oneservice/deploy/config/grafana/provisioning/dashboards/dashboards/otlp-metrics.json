@@ -1,0 +1,117 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "OTLP Metrics Monitoring",
+    "tags": ["otlp", "metrics", "applications"],
+    "style": "dark",
+    "timezone": "",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Application Request Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(http_server_requests_seconds_count[5m])",
+            "refId": "A",
+            "legendFormat": "{{service_name}} - {{method}} {{uri}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Application Response Time",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[5m]))",
+            "refId": "A",
+            "legendFormat": "95th percentile - {{service_name}}"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(http_server_requests_seconds_bucket[5m]))",
+            "refId": "B",
+            "legendFormat": "50th percentile - {{service_name}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Application Error Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(http_server_requests_seconds_count{status=~\"4..|5..\"}[5m]) / rate(http_server_requests_seconds_count[5m]) * 100",
+            "refId": "A",
+            "legendFormat": "{{service_name}} error rate"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "MNIST Training Metrics",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "mnist_loss",
+            "refId": "A",
+            "legendFormat": "Training Loss"
+          },
+          {
+            "expr": "mnist_accuracy",
+            "refId": "B",
+            "legendFormat": "Training Accuracy"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "JVM Memory Usage (Spring App)",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "jvm_memory_used_bytes{application=\"spring-otel-demo\"}",
+            "refId": "A",
+            "legendFormat": "{{area}} - {{id}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "JVM GC Activity",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(jvm_gc_pause_seconds_count{application=\"spring-otel-demo\"}[5m])",
+            "refId": "A",
+            "legendFormat": "{{action}} - {{cause}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Custom Application Metrics",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "up{job=~\"mnist-test|spring-otel-demo\"}",
+            "refId": "A",
+            "legendFormat": "{{job}} availability"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

@@ -1,0 +1,187 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "OneService Monitoring Overview",
+    "tags": ["overview", "oneservice", "monitoring"],
+    "style": "dark",
+    "timezone": "",
+    "panels": [
+      {
+        "id": 1,
+        "title": "System Health",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=~\"node-exporter|cadvisor|postgres-exporter|minio|mnist-test|spring-otel-demo\"}",
+            "refId": "A",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "value": "1",
+                "text": "UP",
+                "color": "green"
+              },
+              {
+                "type": "value", 
+                "value": "0",
+                "text": "DOWN",
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Total Requests/sec",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(http_server_requests_seconds_count[5m]))",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Error Rate %",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(http_server_requests_seconds_count{status=~\"4..|5..\"}[5m])) / sum(rate(http_server_requests_seconds_count[5m])) * 100",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Active Traces",
+        "type": "stat",
+        "targets": [
+          {
+            "queryType": "traceql",
+            "refId": "A",
+            "query": "{ } | rate()",
+            "datasource": {
+              "type": "tempo",
+              "uid": "tempo"
+            }
+          }
+        ],
+        "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Infrastructure Status",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "up{job=~\"node-exporter|cadvisor|postgres-exporter|minio\"}",
+            "refId": "A",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}
+      },
+      {
+        "id": 6,
+        "title": "Application Status", 
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "up{job=~\"mnist-test|spring-otel-demo\"}",
+            "refId": "A",
+            "legendFormat": "{{job}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}
+      },
+      {
+        "id": 7,
+        "title": "CPU Usage by Container",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{name!=\"\",name!~\".*POD.*\"}[5m]) * 100",
+            "refId": "A",
+            "legendFormat": "{{name}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14}
+      },
+      {
+        "id": 8,
+        "title": "Memory Usage by Container",
+        "type": "timeseries", 
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{name!=\"\",name!~\".*POD.*\"} / 1024 / 1024",
+            "refId": "A",
+            "legendFormat": "{{name}} MB"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14}
+      },
+      {
+        "id": 9,
+        "title": "Recent Error Logs",
+        "type": "logs",
+        "targets": [
+          {
+            "expr": "{job=\"alloy\"} | json | level=\"ERROR\" | line_format \"{{.timestamp}} [{{.service_name}}] {{.message}}\"",
+            "refId": "A",
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22}
+      },
+      {
+        "id": 10,
+        "title": "Top Service Latencies",
+        "type": "bargauge",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum by (service_name) (rate(http_server_requests_seconds_bucket[5m])))",
+            "refId": "A",
+            "legendFormat": "{{service_name}} p95"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 30}
+      },
+      {
+        "id": 11,
+        "title": "Database Performance",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "pg_stat_database_tup_returned{datname!=\"template0\"}",
+            "refId": "A",
+            "legendFormat": "{{datname}} rows returned"
+          },
+          {
+            "expr": "pg_stat_database_tup_inserted{datname!=\"template0\"}",
+            "refId": "B", 
+            "legendFormat": "{{datname}} rows inserted"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 30}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}

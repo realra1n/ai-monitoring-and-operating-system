@@ -21,6 +21,10 @@ function setView(name){
   else if(name==='events') renderEvents();
   else if(name==='nodes') renderNodes();
   else if(name==='agents') renderAgents();
+  else if(name==='apm-overview') renderApmOverview();
+  else if(name==='apm-metrics') renderApmMetrics();
+  else if(name==='apm-traces') renderApmTraces();
+  else if(name==='apm-logs') renderApmLogs();
   else if(name==='alerts') renderAlerts();
   else if(name==='tenants') renderTenants();
   else if(name==='settings') renderSettings();
@@ -50,6 +54,15 @@ function grafanaUrl(){
   return g;
 }
 
+function grafanaExploreUrl(type){
+  // type: metrics | loki | tempo
+  const base = grafanaUrl();
+  if(type==='metrics') return `${base}/d/rYdddlPWk/node-exporter-full?orgId=1&refresh=10s`;
+  if(type==='tempo') return `${base}/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22Tempo%22,%7B%7D%5D`;
+  if(type==='loki') return `${base}/explore?orgId=1&left=%5B%22now-1h%22,%22now%22,%22Loki%22,%7B%7D%5D`;
+  return `${base}/explore?orgId=1`;
+}
+
 function renderDashboard(){
   content.innerHTML = `
   <div class='grid'>
@@ -60,6 +73,56 @@ function renderDashboard(){
       <div class='iframe-wrap'><iframe src='${grafanaUrl()}/explore?orgId=1' loading='lazy'></iframe></div>
     </div>
   </div>`;
+}
+
+function renderApmOverview(){
+  viewTitle.textContent = 'APM / Overview';
+  content.innerHTML = `
+    <div class='card'>
+      <h3>APM 概览</h3>
+      <p>系统通过 Grafana Alloy 统一接入 OTLP（http://alloy:4317/4318），将 Metrics 转发至 Prometheus（启用 OTLP Receiver），Traces 转发至 Grafana Tempo（MinIO 对象存储），Logs 转发至 Grafana Loki。</p>
+      <ol>
+        <li>应用 → OTLP → Alloy：批处理、资源标注、抽样（Tail Sampling）。</li>
+        <li>Metrics → Prometheus（/api/v1/otlp）→ Grafana 面板</li>
+        <li>Traces → Tempo → Grafana Tempo 插件</li>
+        <li>Logs → Loki → Grafana Loki 插件</li>
+      </ol>
+      <div class='grid'>
+        <div class='col-4 card'><div class='iframe-wrap'><iframe src='${grafanaExploreUrl('metrics')}'></iframe></div></div>
+        <div class='col-4 card'><div class='iframe-wrap'><iframe src='${grafanaExploreUrl('tempo')}'></iframe></div></div>
+        <div class='col-4 card'><div class='iframe-wrap'><iframe src='${grafanaExploreUrl('loki')}'></iframe></div></div>
+      </div>
+    </div>`;
+}
+
+function renderApmMetrics(){
+  viewTitle.textContent = 'APM / Metrics';
+  content.innerHTML = `
+    <div class='card'>
+      <div class='iframe-wrap'><iframe src='${grafanaUrl()}/d/000000012/node-exporter-full?orgId=1&refresh=10s'></iframe></div>
+    </div>
+    <div class='card'>
+      <div class='iframe-wrap'><iframe src='${grafanaUrl()}/explore?orgId=1&schemaVersion=1&panes=%7B%7D'></iframe></div>
+    </div>
+  `;
+}
+
+function renderApmTraces(){
+  viewTitle.textContent = 'APM / Traces';
+  content.innerHTML = `
+    <div class='card'>
+      <div class='iframe-wrap'><iframe src='${grafanaUrl()}/explore?orgId=1&left=%5B%22now-6h%22,%22now%22,%22Tempo%22,%7B%7D%5D'></iframe></div>
+    </div>
+  `;
+}
+
+function renderApmLogs(){
+  viewTitle.textContent = 'APM / Logs';
+  content.innerHTML = `
+    <div class='card'>
+      <div class='iframe-wrap'><iframe src='${grafanaUrl()}/explore?orgId=1&left=%5B%22now-6h%22,%22now%22,%22Loki%22,%7B%7D%5D'></iframe></div>
+    </div>
+  `;
 }
 
 // Login page moved to login.html

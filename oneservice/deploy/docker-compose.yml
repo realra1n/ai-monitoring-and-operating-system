@@ -1,124 +1,218 @@
+version: '3.8'
+
+networks:
+  monitoring:
+    driver: bridge
+
 services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_DB: oneservice
-    ports: ["5432:5432"]
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ../scripts/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
-
+  # ----------------------------------------------------------------
+  # MinIO - Shared Object Storage
+  # ----------------------------------------------------------------
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2023-09-04T19-57-37Z
+    container_name: minio
     command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
-    ports: ["9000:9000", "9001:9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     volumes:
-      - minio:/data
-
-  minio-setup:
-    image: minio/mc:latest
-    depends_on: [minio]
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      mc alias set local http://minio:9000 minio minio123 &&
-      mc mb -p local/thanos || true &&
-      mc mb -p local/artifacts || true
-
-  opensearch:
-    image: opensearchproject/opensearch:2.11.1
+      - minio_data:/data
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     environment:
-      - discovery.type=single-node
-      - plugins.security.disabled=true
-      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
-    ports: ["9200:9200"]
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
 
-  grafana:
-    image: grafana/grafana:10.2.3
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ALLOW_EMBEDDING: 'true'
-      GF_AUTH_ANONYMOUS_ENABLED: 'true'
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-    ports: ["3000:3000"]
-    volumes:
-      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+  create-buckets:
+    image: minio/mc:RELEASE.2023-09-04T19-57-37Z
+    container_name: create-buckets
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add local http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb local/thanos;
+      /usr/bin/mc mb local/loki;
+      /usr/bin/mc policy set public local/thanos;
+      /usr/bin/mc policy set public local/loki;
+      exit 0;
+      "
+    networks:
+      - monitoring
 
-  prometheus:
-    image: prom/prometheus:v2.51.2
+  # ----------------------------------------------------------------
+  # Metrics Service (Prometheus + Thanos)
+  # ----------------------------------------------------------------
+  prometheus-metrics:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus-metrics
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.external-url=http://localhost:9090'
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - promdata:/prometheus
-      - promfilesd:/etc/prometheus/file_sd
-    ports: ["9090:9090"]
+      - ./config/prometheus-metrics:/etc/prometheus
+      - prometheus_metrics_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+    restart: always
 
   thanos-sidecar:
-    image: quay.io/thanos/thanos:v0.34.0
-    command: sidecar --tsdb.path=/prometheus --prometheus.url=http://prometheus:9090 --objstore.config-file=/etc/thanos/objstore.yml
+    image: thanos/thanos:v0.31.0
+    container_name: thanos-sidecar
+    depends_on:
+      - minio
+      - prometheus-metrics
+    command:
+      - 'sidecar'
+      - '--tsdb.path=/prometheus'
+      - '--prometheus.url=http://prometheus-metrics:9090'
+      - '--objstore.config-file=/etc/thanos/bucket.yml'
     volumes:
-      - promdata:/prometheus
-      - ./thanos/objstore.yml:/etc/thanos/objstore.yml
-    depends_on: [prometheus, minio]
+      - ./config/thanos:/etc/thanos
+      - prometheus_metrics_data:/prometheus
+    ports:
+      - "10901:10901"
+      - "10902:10902"
+    networks:
+      - monitoring
+    restart: always
 
   thanos-query:
-    image: quay.io/thanos/thanos:v0.34.0
-    command: query --http-address=0.0.0.0:10902 --store=thanos-sidecar:10901
-    ports: ["10902:10902"]
-    depends_on: [thanos-sidecar]
-
-  jaeger:
-    image: jaegertracing/all-in-one:1.54
+    image: thanos/thanos:v0.31.0
+    container_name: thanos-query
+    command:
+      - 'query'
+      - '--grpc-address=0.0.0.0:10901'
+      - '--http-address=0.0.0.0:19191'
+      - '--query.replica-label=replica'
+      - '--store=thanos-sidecar:10901'
+      - '--store=thanos-store:10901'
     ports:
-      - "16686:16686"
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
+      - "19191:19191"
+    networks:
+      - monitoring
+    restart: always
 
-  otel-collector:
-    image: otel/opentelemetry-collector:0.104.0
-    command: ["--config=/etc/otelcol/config.yaml"]
+  thanos-store:
+    image: thanos/thanos:v0.31.0
+    container_name: thanos-store
+    depends_on:
+      - minio
+    command:
+      - 'store'
+      - '--data-dir=/var/thanos/store'
+      - '--objstore.config-file=/etc/thanos/bucket.yml'
+      - '--grpc-address=0.0.0.0:10901'
+      - '--http-address=0.0.0.0:10902'
     volumes:
-      - ./otel/config.yaml:/etc/otelcol/config.yaml
-    depends_on: [jaeger]
+      - ./config/thanos:/etc/thanos
+      - thanos_store_data:/var/thanos/store
+    networks:
+      - monitoring
+    restart: always
 
-  oneservice-backend:
-    build: ../backend
-    environment:
-      GRAFANA_URL: http://grafana:3000
-      MINIO_ENDPOINT: http://minio:9000
-      MINIO_ACCESS_KEY: minio
-      MINIO_SECRET_KEY: minio123
-      MINIO_BUCKET: artifacts
-      NODE_EXPORTER_PORT: "9100"
-    depends_on: [postgres, minio, opensearch, grafana, prometheus, thanos-query, jaeger, otel-collector]
-    ports: ["8000:8000"]
+  thanos-compact:
+    image: thanos/thanos:v0.31.0
+    container_name: thanos-compact
+    depends_on:
+      - minio
+    command:
+      - 'compact'
+      - '--data-dir=/var/thanos/compact'
+      - '--objstore.config-file=/etc/thanos/bucket.yml'
+      - '--wait'
     volumes:
-      - promfilesd:/etc/prometheus/file_sd
+      - ./config/thanos:/etc/thanos
+      - thanos_compact_data:/var/thanos/compact
+    networks:
+      - monitoring
+    restart: always
 
-  oneservice-frontend:
-    build: ../frontend
-    depends_on: [oneservice-backend, grafana]
-    ports: ["8080:80"]
+  # ----------------------------------------------------------------
+  # OTLP Service (Alloy + Loki + Grafana + Prometheus)
+  # ----------------------------------------------------------------
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    command:
+      - 'run'
+      - '--storage.path=/var/lib/alloy/data'
+      - '/etc/alloy/config.alloy'
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "12345:12345" # Alloy UI
+    volumes:
+      - ./config/alloy/config.alloy:/etc/alloy/config.alloy
+      - alloy_data:/var/lib/alloy/data
+    networks:
+      - monitoring
+    restart: always
+
+  prometheus-otlp:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus-otlp
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.listen-address=:9091'
+      - '--web.enable-lifecycle'
+      - '--enable-feature=otlp-write-receiver'
+    volumes:
+      - ./config/prometheus-otlp:/etc/prometheus
+      - prometheus_otlp_data:/prometheus
+    ports:
+      - "9091:9091"
+    networks:
+      - monitoring
+    restart: always
+
+  loki:
+    image: grafana/loki:2.8.0
+    container_name: loki
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./config/loki:/etc/loki
+    networks:
+      - monitoring
+    restart: always
+
+  grafana:
+    image: grafana/grafana:9.5.1
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
     environment:
-      NODE_EXPORTER_PORT: "9100"
-
-  mnist-test:
-    platform: linux/arm64
-    build:
-      context: ../test
-      dockerfile: backend/Dockerfile
-    ports: ["8001:8001"]
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    networks:
+      - monitoring
+    restart: always
 
 volumes:
-  pgdata:
-  minio:
-  promdata:
-  promfilesd:
+  minio_data:
+  prometheus_metrics_data:
+  prometheus_otlp_data:
+  thanos_store_data:
+  thanos_compact_data:
+  alloy_data:
+  grafana_data:

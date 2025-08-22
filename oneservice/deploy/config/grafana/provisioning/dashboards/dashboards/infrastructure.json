@@ -1,0 +1,124 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Infrastructure Monitoring",
+    "tags": ["infrastructure", "exporters"],
+    "style": "dark",
+    "timezone": "",
+    "panels": [
+      {
+        "id": 1,
+        "title": "System Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=~\"node-exporter|cadvisor|postgres-exporter|minio\"}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "CPU Usage",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+            "refId": "A",
+            "legendFormat": "{{instance}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Memory Usage",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+            "refId": "A",
+            "legendFormat": "{{instance}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Disk I/O",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(node_disk_read_bytes_total[5m])",
+            "refId": "A",
+            "legendFormat": "Read {{device}}"
+          },
+          {
+            "expr": "rate(node_disk_written_bytes_total[5m])",
+            "refId": "B",
+            "legendFormat": "Write {{device}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Container CPU Usage",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]) * 100",
+            "refId": "A",
+            "legendFormat": "{{name}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "Container Memory Usage",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{name!=\"\"}",
+            "refId": "A",
+            "legendFormat": "{{name}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 7,
+        "title": "Database Connections",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "pg_stat_database_numbackends{datname!=\"template0\"}",
+            "refId": "A",
+            "legendFormat": "{{datname}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "MinIO Request Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(minio_http_requests_duration_seconds_count[5m])",
+            "refId": "A",
+            "legendFormat": "{{method}} {{api}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "30s"
+  }
+}
